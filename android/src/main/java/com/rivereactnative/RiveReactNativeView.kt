@@ -410,6 +410,9 @@ class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout
 
 
   private fun resetRiveResource() {
+    initialAssetsHandled?.let { assets ->
+      riveAnimationView.setAssetLoader(HandleSimpleRiveAsset(context, assets))
+    }
     url?.let {
       if (resId == -1) {
         setUrlRiveResource(it, false)
@@ -440,6 +443,9 @@ class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout
 
   private fun reloadIfNeeded() {
     if (shouldBeReloaded) {
+      initialAssetsHandled?.let { assets ->
+        riveAnimationView.setAssetLoader(HandleSimpleRiveAsset(context, assets))
+      }
       url?.let {
         if (resId == -1) {
           setUrlRiveResource(it)
@@ -449,9 +455,6 @@ class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout
       } ?: run {
         if (resId != -1) {
           try {
-            initialAssetsHandled?.let { assets ->
-              riveAnimationView.setAssetLoader(HandleSimpleRiveAsset(context, assets))
-            }
             riveAnimationView.setRiveResource(
               resId,
               fit = this.fit,
