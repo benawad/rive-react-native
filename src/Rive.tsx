@@ -31,6 +31,21 @@ const { RiveReactNativeRendererModule } = NativeModules;
 export const RiveRenderer =
   RiveReactNativeRendererModule as RiveRendererInterface;
 
+  interface FileHandlerOptions {
+    /**
+     * Name of the asset in the iOS main bundle
+     */
+    bundledAssetName?: string;
+    /**
+     * URL of the asset to pull from
+     */
+    assetUrl?: string;
+  }
+
+  interface FilesHandledMapping {
+    [key: string]: FileHandlerOptions;
+  }
+
 type RiveProps = {
   onPlay?: (
     event: NativeSyntheticEvent<{
@@ -73,6 +88,7 @@ type RiveProps = {
       message: string;
     }>
   ) => void;
+  initialAssetsHandled?: FilesHandledMapping;
   isUserHandlingErrors: boolean;
   autoplay?: boolean;
   fit: Fit;
@@ -90,6 +106,7 @@ type RiveProps = {
 const VIEW_NAME = 'RiveReactNativeView';
 
 type Props = {
+  initialAssetsHandled?: FilesHandledMapping;
   onPlay?: (animationName: string, isStateMachine: boolean) => void;
   onPause?: (animationName: string, isStateMachine: boolean) => void;
   onStop?: (animationName: string, isStateMachine: boolean) => void;
@@ -121,6 +138,7 @@ const RiveContainer = React.forwardRef<RiveRef, Props>(
       onStateChanged,
       onRiveEventReceived,
       onError,
+      initialAssetsHandled,
       style,
       autoplay = true,
       resourceName,
@@ -425,6 +443,7 @@ const RiveContainer = React.forwardRef<RiveRef, Props>(
             onStateChanged={onStateChangedHandler}
             onRiveEventReceived={onRiveEventReceivedHandler}
             onError={onErrorHandler}
+            initialAssetsHandled={initialAssetsHandled}
             alignment={alignment}
             artboardName={artboardName}
             animationName={animationName}

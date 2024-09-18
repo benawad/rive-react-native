@@ -5,7 +5,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
     // MARK: RiveReactNativeView Properties
     private var resourceFromBundle = true
     private var requiresLocalResourceReconfigure = false
-    
+
     // MARK: React Callbacks
     @objc var onPlay: RCTDirectEventBlock?
     @objc var onPause: RCTDirectEventBlock?
@@ -14,12 +14,13 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
     @objc var onStateChanged: RCTDirectEventBlock?
     @objc var onRiveEventReceived: RCTDirectEventBlock?
     @objc var onError: RCTDirectEventBlock?
+    @objc var initialAssetsHandled: NSDictionary?
     @objc var isUserHandlingErrors: Bool
-    
+
     // MARK: RiveRuntime Bindings
     var riveView: RiveView?
     var viewModel: RiveViewModel?
-    
+
     @objc var resourceName: String? = nil {
         didSet {
             if (resourceName != nil) {
@@ -29,7 +30,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             }
         }
     }
-    
+
     @objc var url: String? = nil {
         didSet {
             if (url != nil) {
@@ -38,11 +39,11 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             }
         }
     }
-    
+
     @objc var fit: String?
-    
+
     @objc var alignment: String?
-    
+
     @objc var autoplay: Bool
     {
         didSet {
@@ -51,56 +52,56 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             }
         }
     }
-    
+
     @objc var artboardName: String?
-    
-    
+
+
     @objc var animationName: String?
-    
-    
+
+
     @objc var stateMachineName: String?
-    
-    
+
+
     override init(frame: CGRect) {
         self.autoplay = false // will be changed by react native
         self.isUserHandlingErrors = false
         super.init(frame: frame)
     }
-    
+
     required init?(coder aDecoder: NSCoder) {
         self.autoplay = true
         self.isUserHandlingErrors = false
         super.init(coder: aDecoder)
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     // MARK: - React Native Helpers
-    
+
     override func removeFromSuperview() {
         removeReactSubview(riveView) // TODO: Investigate if this is the optimal place to remove, and if this is necessary.
     }
-    
+
     override func layoutSubviews() {
         super.layoutSubviews()
         for view in subviews {
             view.reactSetFrame(self.bounds)
         }
     }
-    
+
     override func didSetProps(_ changedProps: [String]!) {
         if (changedProps.contains("url") || changedProps.contains("resourceName") || changedProps.contains("artboardName") || changedProps.contains("animationName") || changedProps.contains("stateMachineName")) {
             reloadView()
         }
-        
+
         if (changedProps.contains("fit")) {
             viewModel?.fit = convertFit(fit)
         }
-        
+
         if (changedProps.contains("alignment"))  {
             viewModel?.alignment = convertAlignment(alignment)
         }
     }
-    
+
     private func convertFit(_ fit: String? = nil) -> RiveFit {
         if let safeFit = fit {
             let rnFit = RNFit.mapToRNFit(value: safeFit)
@@ -108,7 +109,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
         }
         return RiveFit.contain
     }
-    
+
     private func convertAlignment(_ alignment: String? = nil) -> RiveAlignment {
         if let safeAlignment = alignment {
             let rnAlignment = RNAlignment.mapToRNAlignment(value: safeAlignment)
@@ -116,43 +117,54 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
         }
         return RiveAlignment.center
     }
-    
+
     private func createNewView(updatedViewModel : RiveViewModel){
         riveView?.playerDelegate = nil
         riveView?.stateMachineDelegate = nil
         removeReactSubview(riveView)
-        
+
         viewModel = updatedViewModel
         riveView = viewModel!.createRiveView();
         addSubview(riveView!)
         riveView?.playerDelegate = self
         riveView?.stateMachineDelegate = self
     }
-    
+
     private func configureViewModelFromResource() {
         if let name = resourceName {
             url = nil
             resourceFromBundle = true
-            
+
             let updatedViewModel : RiveViewModel
             if let smName = stateMachineName {
-                updatedViewModel = RiveViewModel(fileName: name, stateMachineName: smName, fit: convertFit(fit), alignment: convertAlignment(alignment), autoPlay: autoplay, artboardName: artboardName)
+                updatedViewModel = RiveViewModel(fileName: name, stateMachineName: smName, fit: convertFit(fit), alignment: convertAlignment(alignment), autoPlay: autoplay, artboardName: artboardName, customLoader: { (asset: RiveFileAsset, data: Data, factory: RiveFactory) -> Bool in
+                    if let workingFilesHandled = self.initialAssetsHandled {
+                         let convertedFilesHandled = SwiftFilesHandled(from: workingFilesHandled)
+                         if let fileToHandle = convertedFilesHandled.files["\(asset.name())"] {
+                             if let assetUrl = fileToHandle.assetUrl as String? {
+                                self.handleUrlAsset(assetUrl: assetUrl, asset: asset, factory: factory)
+                             }
+                            return true
+                         }
+                    }
+                    return false
+                })
             } else if let animName = animationName {
                 updatedViewModel = RiveViewModel(fileName: name, animationName: animName, fit: convertFit(fit), alignment: convertAlignment(alignment), autoPlay: autoplay, artboardName: artboardName)
             } else {
                 updatedViewModel = RiveViewModel(fileName: name, fit: convertFit(fit), alignment: convertAlignment(alignment), autoPlay: autoplay, artboardName: artboardName)
             }
-            
+
             createNewView(updatedViewModel: updatedViewModel)
             requiresLocalResourceReconfigure = false
         }
     }
-    
+
     private func configureViewModelFromUrl() {
         if let url = url {
             resourceName = nil
             resourceFromBundle = false
-            
+
             let updatedViewModel : RiveViewModel
             if let smName = stateMachineName {
                 updatedViewModel = RiveViewModel(webURL: url, stateMachineName: smName, fit: convertFit(fit), alignment: convertAlignment(alignment), autoPlay: autoplay, artboardName: artboardName)
@@ -161,33 +173,33 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             } else {
                 updatedViewModel = RiveViewModel(webURL: url, fit: convertFit(fit), alignment: convertAlignment(alignment), autoPlay: autoplay, artboardName: artboardName)
             }
-            
+
             createNewView(updatedViewModel: updatedViewModel)
         }
     }
-    
+
     private func reloadView() {
         if resourceFromBundle {
             if requiresLocalResourceReconfigure {
                 configureViewModelFromResource()
                 return; // exit early, new RiveViewModel created, no need to configure further
             }
-            
+
             do {
                 try viewModel?.configureModel(artboardName: artboardName, stateMachineName: stateMachineName, animationName: animationName)
             } catch let error as NSError {
                 handleRiveError(error: error)
             }
-            
+
         } else {
             configureViewModelFromUrl() // TODO: calling viewModel?.configureModel for a URL ViewModel throws. Requires further investigation. Currently recreating the whole ViewModel for certain prop changes.
         }
-        
-        
+
+
     }
-    
+
     // MARK: - Playback Controls
-    
+
     func play(animationName: String? = nil, rnLoopMode: RNLoopMode, rnDirection: RNDirection, isStateMachine: Bool) {
         let loop = RNLoopMode.mapToRiveLoop(rnLoopMode: rnLoopMode)
         let direction = RNDirection.mapToRiveDirection(rnDirection: rnDirection)
@@ -197,30 +209,30 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             viewModel?.play(animationName: animationName, loop: loop, direction: direction)
         }
     }
-    
+
     func pause() {
         viewModel?.pause()
     }
-    
+
     func stop() {
         viewModel?.stop()
     }
-    
+
     func reset() {
         viewModel?.reset()
         reloadView()
     }
-    
+
     // MARK: - StateMachine Inputs
-    
+
     func fireState(stateMachineName: String, inputName: String) {
         viewModel?.triggerInput(inputName)
     }
-    
+
     func setNumberState(stateMachineName: String, inputName: String, value: Float) {
         viewModel?.setInput(inputName, value: value)
     }
-    
+
     func setBooleanState(stateMachineName: String, inputName: String, value: Bool) {
         viewModel?.setInput(inputName, value: value)
     }
@@ -232,11 +244,11 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
     func setNumberStateAtPath(inputName: String, value: Float, path: String) {
         viewModel?.setInput(inputName, value: value, path: path)
     }
-    
+
     func setBooleanStateAtPath(inputName: String, value: Bool, path: String) {
         viewModel?.setInput(inputName, value: value, path: path)
     }
-    
+
     // MARK: - Text Runs
     func setTextRunValue(textRunName: String, textRunValue: String) throws {
         do {
@@ -245,16 +257,16 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             handleRiveError(error: error)
         }
     }
-    
+
     // MARK: - StateMachineDelegate
-    
+
     @objc func stateMachine(_ stateMachine: RiveStateMachineInstance, didChangeState stateName: String) {
         onStateChanged?(["stateMachineName": stateMachine.name(), "stateName": stateName])
     }
-    
+
     @objc func stateMachine(_ stateMachine: RiveStateMachineInstance, receivedInput input: StateMachineInput) {
     }
-    
+
     @objc func onRiveEventReceived(onRiveEvent riveEvent: RiveEvent) {
         // Need to convert NSObject to Dictionary so React Native can support the serialization to JS
         // Might be a better way to convert NSObject -> Dictionary in the future
@@ -270,9 +282,9 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
         }
         onRiveEventReceived?(["riveEvent": eventDict])
     }
-    
+
     // MARK: - PlayerDelegate
-    
+
     func player(playedWithModel riveModel: RiveModel?) {
         if (riveModel?.animation != nil || riveModel?.stateMachine != nil) {
             onPlay?([
@@ -281,34 +293,34 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             ])
         }
     }
-    
+
     func player(pausedWithModel riveModel: RiveModel?) {
         onPause?([
             "animationName": riveModel?.animation?.name() ?? riveModel?.stateMachine?.name() ?? "",
             "isStateMachine": riveModel?.stateMachine != nil
         ])
     }
-    
+
     func player(loopedWithModel riveModel: RiveModel?, type: Int) {
         onLoopEnd?([
             "animationName": riveModel?.animation?.name() ?? "",
             "loopMode": RNLoopMode.mapToRNLoopMode(value: type).rawValue
         ])
     }
-    
+
     func player(stoppedWithModel riveModel: RiveModel?) {
         onStop?([
             "animationName": riveModel?.animation?.name() ?? riveModel?.stateMachine?.name() ?? "",
             "isStateMachine": riveModel?.stateMachine != nil
         ])
     }
-    
+
     func player(didAdvanceby seconds: Double, riveModel: RiveModel?) {
         // TODO: implement if in Android
     }
-    
+
     // MARK: - Touch Events
-    
+
     @objc open func touchBegan(_ location: CGPoint) {
         handleTouch(location: location) { machine, abLocation in
             guard let riveView = viewModel?.riveView else { fatalError("No RiveView") }
@@ -318,7 +330,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             }
         }
     }
-    
+
     @objc open func touchMoved(_ location: CGPoint) {
         handleTouch(location: location) { machine, abLocation in
             guard let riveView = viewModel?.riveView else { fatalError("No RiveView") }
@@ -326,7 +338,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             riveView.stateMachineDelegate?.touchMoved?(onArtboard: artboard, atLocation: abLocation)
         }
     }
-    
+
     @objc open func touchEnded(_ location: CGPoint) {
         handleTouch(location: location) { machine, abLocation in
             guard let riveView = viewModel?.riveView else { fatalError("No RiveView") }
@@ -334,7 +346,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             riveView.stateMachineDelegate?.touchEnded?(onArtboard: artboard, atLocation: abLocation)
         }
     }
-    
+
     @objc open func touchCancelled(_ location: CGPoint) {
         handleTouch(location: location) { machine, abLocation in
             guard let riveView = viewModel?.riveView else { fatalError("No RiveView") }
@@ -342,7 +354,7 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             riveView.stateMachineDelegate?.touchCancelled?(onArtboard: artboard, atLocation: abLocation)
         }
     }
-    
+
     private func handleTouch(location: CGPoint, action: (RiveStateMachineInstance, CGPoint)->Void) {
         if let viewModel = viewModel, let riveView = viewModel.riveView {
             let artboardLocation = riveView.artboardLocation(
@@ -357,13 +369,13 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
             }
         }
     }
-    
+
     // MARK: - Error Handling
-    
+
     private func onRNRiveError(_ rnRiveError: BaseRNRiveError) {
         onError?(["type": rnRiveError.type, "message": rnRiveError.message])
     }
-    
+
     private func handleRiveError(error: NSError) {
         if isUserHandlingErrors {
             let rnRiveError = RNRiveError.mapToRNRiveError(riveError: error)
@@ -373,5 +385,42 @@ class RiveReactNativeView: RCTView, RivePlayerDelegate, RiveStateMachineDelegate
         } else {
             RCTLogError(error.localizedDescription)
         }
+    }
+
+    private func handleUrlAsset(assetUrl: String, asset: RiveFileAsset, factory: RiveFactory) {
+        if let url = URL(string: assetUrl) {
+            do {
+                let imageData = try Data(contentsOf: url)
+                let renderImage = factory.decodeImage(imageData)
+                if let imageAsset = asset as? RiveImageAsset {
+                    imageAsset.renderImage(renderImage)
+                }
+            } catch {
+            }
+        }
+    }
+}
+
+struct FileHandlerOptions {
+    var bundledAssetName: String?
+    var assetUrl: String?
+
+    init(from dictionary: NSDictionary) {
+        self.bundledAssetName = dictionary["bundledAssetName"] as? String ?? nil
+        self.assetUrl = dictionary["assetUrl"] as? String ?? nil
+    }
+}
+
+struct SwiftFilesHandled {
+    var files: [String: FileHandlerOptions]
+
+    init(from rnFilesHandled: NSDictionary) {
+        var filesHandled = [String: FileHandlerOptions]()
+        if let dictionary = rnFilesHandled as? [String: NSDictionary] {
+            for (key, value) in dictionary {
+                filesHandled[key] = FileHandlerOptions(from: value)
+            }
+        }
+        self.files = filesHandled
     }
 }

@@ -20,10 +20,16 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.ExceptionsManagerModule
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.events.RCTEventEmitter
 import java.io.UnsupportedEncodingException
+import app.rive.runtime.kotlin.core.ContextAssetLoader
+import app.rive.runtime.kotlin.core.FileAsset
+import android.content.Context
+import java.io.File
+import java.io.FileInputStream
 
 class ReactNativeRiveViewLifecycleObserver() :
   DefaultLifecycleObserver {
@@ -63,6 +69,52 @@ class ReactNativeRiveAnimationView(private val context: ThemedReactContext) : Ri
   }
 }
 
+open class HandleSimpleRiveAsset(context: Context, private val initialAssetsHandled: ReadableMap) : ContextAssetLoader(context) {
+    override fun loadContents(asset: FileAsset, inBandBytes: ByteArray): Boolean {
+        initialAssetsHandled.getMap(asset.name)?.let { assetMap ->
+            assetMap.getString("assetUrl")?.let { assetUrl ->
+                if (assetUrl.startsWith("http://") || assetUrl.startsWith("https://")) {
+                    // Handle remote URL
+                    loadFromRemoteUrl(asset, assetUrl)
+                } else {
+                    // Handle local file path
+                    loadFromLocalFile(asset, assetUrl)
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun loadFromRemoteUrl(asset: FileAsset, assetUrl: String) {
+        val queue = Volley.newRequestQueue(context)
+        val request = RNRiveFileRequest(assetUrl,
+            { bytes ->
+                // Decode the downloaded bytes
+                asset.decode(bytes)
+            },
+            { error ->
+                android.util.Log.e("RiveReactNativeView", "Error downloading asset: ${error.message}")
+            }
+        )
+        queue.add(request)
+    }
+
+    private fun loadFromLocalFile(asset: FileAsset, filePath: String) {
+        try {
+            val file = File(filePath)
+            if (file.exists()) {
+                val inputStream = FileInputStream(file)
+                val bytes = inputStream.readBytes()
+                inputStream.close()
+                asset.decode(bytes)
+            } else {
+            }
+        } catch (e: Exception) {
+        }
+    }
+}
+
 class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout(context) {
   private var riveAnimationView: ReactNativeRiveAnimationView
   private var resId: Int = -1
@@ -77,6 +129,7 @@ class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout
   private var exceptionManager: ExceptionsManagerModule? = null
   private var isUserHandlingErrors = false
   private var willDispose = false;
+  private var initialAssetsHandled: ReadableMap? = null
 
   enum class Events(private val mName: String) {
     PLAY("onPlay"),
@@ -396,6 +449,9 @@ class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout
       } ?: run {
         if (resId != -1) {
           try {
+            initialAssetsHandled?.let { assets ->
+              riveAnimationView.setAssetLoader(HandleSimpleRiveAsset(context, assets))
+            }
             riveAnimationView.setRiveResource(
               resId,
               fit = this.fit,
@@ -477,6 +533,10 @@ class RiveReactNativeView(private val context: ThemedReactContext) : FrameLayout
     } catch (ex: RiveException) {
       handleRiveException(ex);
     }
+  }
+
+  fun setInitialAssetsHandled(initialAssetsHandled: ReadableMap?) {
+    this.initialAssetsHandled = initialAssetsHandled
   }
 
   fun setBooleanState(stateMachineName: String, inputName: String, value: Boolean) {

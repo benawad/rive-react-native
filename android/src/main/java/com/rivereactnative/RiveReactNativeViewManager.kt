@@ -1,6 +1,7 @@
 package com.rivereactnative
 
 import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.common.MapBuilder
 import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
@@ -156,6 +157,12 @@ class RiveReactNativeViewManager : SimpleViewManager<RiveReactNativeView>() {
   @ReactProp(name = "resourceName")
   fun setResourceName(view: RiveReactNativeView, resourceName: String?) {
     view.setResourceName(resourceName)
+  }
+
+  @ReactProp(name = "initialAssetsHandled")
+  fun setInitialAssetsHandled(view: RiveReactNativeView, initialAssetsHandled: ReadableMap?) {
+    android.util.Log.d("RiveReactNativeView", "BEN setInitialAssetsHandled")
+    view.setInitialAssetsHandled(initialAssetsHandled)
   }
 
   @ReactProp(name = "fit")
